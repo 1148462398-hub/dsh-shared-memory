@@ -1,0 +1,14 @@
+url: https://github.com/1148462398-hub/dsh-shared-memory
+name: 1148462398-hub/dsh-shared-memory
+category: memory
+description:
+  en: >
+    Shared Markdown memory for every DSH session: persona, requirements, corrections, lessons,
+    methods, requests, sessions, a method library and ingested documents, mirrored to a second
+    disk with version snapshots and a cross-process write lock. Entries move between the main
+    file and a searchable archive by hit frequency and repeated emphasis; retrieval is keyword
+    co-occurrence plus BM25. Ships ten tools and a three-tab sidebar panel.
+  zh: >
+    所有会话共用一份 Markdown 记忆，含人设、要求、指正、教训、方法、请求、会话、方法库与导入文档九个分区；
+    双硬盘镜像、历史快照、跨进程写锁。条目按命中频率与重复强调在主文件与可检索归档之间双向流动，
+    检索为关键词共现加 BM25 排序，另带十个工具与三页签侧边栏面板。

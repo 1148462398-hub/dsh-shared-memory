@@ -1,0 +1,10 @@
+node_modules/
+*.log
+.DS_Store
+Thumbs.db
+# 插件运行期产物（不应进仓库）
+*.lock
+MEMORY.md
+MEMORY.archive.md
+MEMORY.index.json
+.history/
