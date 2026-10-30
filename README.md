@@ -237,6 +237,40 @@ http://127.0.0.1:49870/dsh-shared-memory
 | `memory_file_maintain({action:"diff", version:"<历史文件>", to:""})` | 行级差异（与当前或另一个版本比） |
 | `GET /dsh-shared-memory/api/history?from=<历史文件>` | 历史版本列表 + diff，侧边栏"备份与版本"卡片用的就是它 |
 
+## 自有技能库（SKILL.md，不带脚本执行）
+
+方法库记的是"一句话结论"，**技能**记的是"能照着做的完整流程"，存在 DSH 原生技能目录：
+
+```
+~/.dsh/skills/<name>/SKILL.md     ← frontmatter: name / description / triggers / user-invocable
+```
+
+写进去的技能下次会话就在技能目录里，`skill` 工具能直接加载（格式与 DSH 自带技能一致，比如本机已有的 `dsgs-init` / `start`）。
+
+| 工具动作 | 作用 |
+| --- | --- |
+| `memory_file_skill({action:"match", task})` | 按任务匹配自有技能，并按**当前质疑度**给出选路建议 |
+| `{action:"list"}` / `{action:"read", name}` | 列出全部 / 读某条全文 |
+| `{action:"save", name, description, triggers, steps}` | 把一次跑通的做法沉淀成技能 |
+| `{action:"report", name, ok}` | 记录这次用技能成功/失败（影响排序） |
+| `{action:"remove", name}` | 删除 |
+
+**选路规则（质疑度管）**：
+
+| 质疑度 | 行为 |
+| --- | --- |
+| 0–2 | **优先用自有技能**；都不命中再搜网 |
+| 3–6 | 先试自有技能，失败或把握不大 → 搜网比较，必要时改写技能 |
+| 7–10 | **先搜网/比价**，再决定用不用自有技能 |
+
+### 安全边界（重要）
+
+这版**只存操作手册，不执行任何脚本**：
+
+- `save` 里的 `script` 只作为 Markdown 文本保存，**不会落成 `run.mjs`，也不会被调用**
+- 技能名只允许 `a-z0-9-`，路径做了越界检查，写不到技能目录之外
+- 以后要支持"技能自带脚本自动运行"，必须先过用户确认 + 白名单目录 + 超时 + 默认禁网，单独当功能评审
+
 ## 工具
 
 | 工具 | 用途 |
@@ -250,6 +284,7 @@ http://127.0.0.1:49870/dsh-shared-memory
 | `memory_file_skepticism` | 短摘要：当前档位、未更优计数、按作用分类的索引概览（`format:"json"` 可拿结构） |
 | `memory_file_consolidate` | `scan` 列出可整合的相似记忆簇（只读；合并由模型手写，插件不自动改） |
 | `memory_file_ingest` | 把本地 `.md`/`.txt` 按 `## ` 切块导入 `docs` 分区（只进检索、不进注入） |
+| `memory_file_skill` | 自有技能库：`match` 匹配 + 按质疑度选路 / `save` 存成 SKILL.md / `read` / `list` / `report` / `remove`（不执行脚本） |
 | `memory_file_maintain` | `sync` 对账回补 / `relocate` 换位置 / `history` 列历史 / `rollback` 回滚 / `rebalance` 按命中频率重分层 / `reset` 删双备份重建 |
 
 ## 配置

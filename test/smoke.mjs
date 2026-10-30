@@ -13,6 +13,8 @@ import { buildMemoryPrompt, buildPersonaPrompt } from '../lib/prompt.js'
 import { buildMemoryTools } from '../lib/tools.js'
 import { renderPage, MEMORY_PAGE_PREFIX } from '../lib/webui.js'
 import { runInstallSelfTest } from '../lib/selftest.js'
+import { bumpStats, listSkills, matchSkills, readSkill, readStats, removeSkill, saveSkill } from '../lib/skills.js'
+import { existsSync } from 'node:fs'
 
 const root = path.join(os.tmpdir(), `shared-memory-smoke-${Date.now()}`)
 const primary = path.join(root, 'A', 'MEMORY.md')
@@ -170,7 +172,7 @@ console.log('9) 提示词渲染：预算 / 边界打断 / 人设')
 console.log('10) 工具定义合法性')
 {
   const tools = buildMemoryTools({ store, hooks: { relocate: async () => ({}), reset: async () => ({}) } })
-  check('注册了 10 个工具', tools.length === 10, String(tools.length))
+  check('注册了 11 个工具', tools.length === 11, String(tools.length))
   const names = tools.map((t) => t.name)
   check('含检索工具', names.includes('memory_file_search'))
   check('工具名无重复', new Set(names).size === names.length)
@@ -678,6 +680,39 @@ console.log('26) 安装自检（临时目录，不碰真实记忆）')
   check('模式是多进程或退化为进程内', ['multi-process', 'in-process'].includes(result.mode), result.mode)
   const after = await fsp.readFile(watched, 'utf8').catch(() => '')
   check('安装自检没碰已有记忆文件', before === after)
+}
+
+console.log('27) 技能库（SKILL.md；只存手册，不执行脚本）')
+{
+  const skillsRoot = path.join(root, 'skills')
+  await fsp.mkdir(skillsRoot, { recursive: true })
+  process.env.DSH_SKILLS_DIR = skillsRoot
+
+  const saved = saveSkill({
+    name: 'demo-skill',
+    description: '演示：给模型做三维重建时用',
+    triggers: ['三维重建', '建模'],
+    body: '# 步骤\n1. 先量尺寸\n2. 再建模'
+  })
+  check('技能写入 SKILL.md', saved.path.endsWith('SKILL.md'))
+  check('能列出技能', listSkills().some((s) => s.name === 'demo-skill'))
+  const matched = matchSkills('帮我做三维重建')
+  check('能按任务匹配技能', matched.length > 0 && matched[0].name === 'demo-skill', JSON.stringify(matched.map((m) => m.name)))
+  check('能读技能全文', readSkill('demo-skill').body.includes('先量尺寸'))
+  bumpStats('demo-skill', true)
+  check('能记成功次数', readStats('demo-skill').ok === 1, JSON.stringify(readStats('demo-skill')))
+  let nameRejected = false
+  try {
+    saveSkill({ name: '../evil', description: 'x', body: 'y' })
+  } catch {
+    nameRejected = true
+  }
+  check('拒绝越界/非法技能名', nameRejected)
+  check('不会生成可执行脚本文件', !existsSync(path.join(skillsRoot, 'demo-skill', 'run.mjs')))
+  removeSkill('demo-skill')
+  check('能删除技能', !listSkills().some((s) => s.name === 'demo-skill'))
+
+  delete process.env.DSH_SKILLS_DIR
 }
 
 await fsp.rm(root, { recursive: true, force: true })
