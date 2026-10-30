@@ -13,7 +13,7 @@ import { buildMemoryPrompt, buildPersonaPrompt } from '../lib/prompt.js'
 import { buildMemoryTools } from '../lib/tools.js'
 import { renderPage, MEMORY_PAGE_PREFIX } from '../lib/webui.js'
 import { runInstallSelfTest } from '../lib/selftest.js'
-import { bumpStats, listSkills, matchSkills, readSkill, readStats, removeSkill, saveSkill } from '../lib/skills.js'
+import { bumpStats, listSkills, matchSkills, readSkill, readStats, removeSkill, saveSkill, runSkill } from '../lib/skills.js'
 import { existsSync } from 'node:fs'
 
 const root = path.join(os.tmpdir(), `shared-memory-smoke-${Date.now()}`)
@@ -711,6 +711,41 @@ console.log('27) 技能库（SKILL.md；只存手册，不执行脚本）')
   check('不会生成可执行脚本文件', !existsSync(path.join(skillsRoot, 'demo-skill', 'run.mjs')))
   removeSkill('demo-skill')
   check('能删除技能', !listSkills().some((s) => s.name === 'demo-skill'))
+
+  delete process.env.DSH_SKILLS_DIR
+}
+
+console.log('28) 技能执行（run.mjs + 护栏）')
+{
+  const skillsRoot = path.join(root, 'skills-run')
+  await fsp.mkdir(skillsRoot, { recursive: true })
+  process.env.DSH_SKILLS_DIR = skillsRoot
+  saveSkill({ name: 'echo-skill', description: '回显参数', triggers: ['回显'], body: '# 手册' })
+
+  const noScript = await runSkill('echo-skill', {})
+  check('没有 run.mjs 时拒绝执行', noScript.ok === false && /没有 run\.mjs/.test(noScript.reason ?? ''), noScript.reason)
+
+  const dir = path.join(skillsRoot, 'echo-skill')
+  await fsp.writeFile(
+    path.join(dir, 'run.mjs'),
+    "const a = JSON.parse(process.env.DSH_SKILL_ARGS || '{}')\nconsole.log('hello', a.name || '', process.env.DSH_SKILL_NAME || '')\n",
+    'utf8'
+  )
+  const out = await runSkill('echo-skill', { name: 'world' })
+  check('能执行 run.mjs', out.ok === true && out.stdout.includes('hello world'), JSON.stringify(out.stdout))
+  check('参数经环境变量传入（不拼 shell）', out.stdout.includes('echo-skill'))
+
+  const md = path.join(dir, 'SKILL.md')
+  const text = await fsp.readFile(md, 'utf8')
+  await fsp.writeFile(md, text.replace('user-invocable: true', 'user-invocable: true\ndangerous: true'), 'utf8')
+  const blocked = await runSkill('echo-skill', {})
+  check('dangerous 技能需要 confirm', blocked.ok === false && /confirm/.test(blocked.reason ?? ''), blocked.reason)
+  const allowed = await runSkill('echo-skill', {}, { confirm: true })
+  check('confirm 后允许执行', allowed.ok === true)
+
+  await fsp.writeFile(path.join(dir, 'run.mjs'), 'setTimeout(() => {}, 10000)\n', 'utf8')
+  const timed = await runSkill('echo-skill', {}, { timeoutMs: 1200, confirm: true })
+  check('超时会被终止', timed.timedOut === true, `ms=${timed.ms}`)
 
   delete process.env.DSH_SKILLS_DIR
 }
