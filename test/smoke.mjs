@@ -712,6 +712,15 @@ console.log('27) 技能库（SKILL.md；只存手册，不执行脚本）')
   removeSkill('demo-skill')
   check('能删除技能', !listSkills().some((s) => s.name === 'demo-skill'))
 
+  const withHint = buildMemoryPrompt(store.view(), {
+    injectChars: 6000,
+    scope: 'global',
+    skills: { count: 2, names: ['demo-skill', 'other-skill'] },
+    skillHint: '这轮用户输入可能命中自有技能：`demo-skill`（匹配 3）'
+  })
+  check('技能清单进提示词', withHint.includes('demo-skill') && withHint.includes('自有技能'))
+  check('自动匹配提示进提示词', withHint.includes('本轮提示') && withHint.includes('匹配 3'))
+
   delete process.env.DSH_SKILLS_DIR
 }
 
