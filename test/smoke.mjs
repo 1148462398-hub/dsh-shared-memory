@@ -14,6 +14,7 @@ import { buildMemoryTools } from '../lib/tools.js'
 import { renderPage, MEMORY_PAGE_PREFIX } from '../lib/webui.js'
 import { runInstallSelfTest } from '../lib/selftest.js'
 import { bumpStats, listSkills, matchSkills, readSkill, readStats, removeSkill, saveSkill, runSkill } from '../lib/skills.js'
+import { matchSticker, scanStickers, recordUsage, setTags, stickersSummary } from '../lib/stickers.js'
 import { existsSync } from 'node:fs'
 
 const root = path.join(os.tmpdir(), `shared-memory-smoke-${Date.now()}`)
@@ -172,7 +173,7 @@ console.log('9) 提示词渲染：预算 / 边界打断 / 人设')
 console.log('10) 工具定义合法性')
 {
   const tools = buildMemoryTools({ store, hooks: { relocate: async () => ({}), reset: async () => ({}) } })
-  check('注册了 11 个工具', tools.length === 11, String(tools.length))
+  check('注册了 12 个工具', tools.length === 12, String(tools.length))
   const names = tools.map((t) => t.name)
   check('含检索工具', names.includes('memory_file_search'))
   check('工具名无重复', new Set(names).size === names.length)
@@ -757,6 +758,40 @@ console.log('28) 技能执行（run.mjs + 护栏）')
   check('超时会被终止', timed.timedOut === true, `ms=${timed.ms}`)
 
   delete process.env.DSH_SKILLS_DIR
+}
+
+console.log('29) 表情包（用户导入 + 自动分类 + 按情绪挑选）')
+{
+  const dir = path.join(root, 'stickers')
+  await fsp.mkdir(dir, { recursive: true })
+  process.env.DSH_STICKERS_DIR = dir
+  await fsp.writeFile(path.join(dir, '害羞_捂脸.png'), 'x')
+  await fsp.writeFile(path.join(dir, '生气_气鼓鼓.png'), 'x')
+  await fsp.writeFile(path.join(dir, 'readme.txt'), 'not an image')
+
+  const list = scanStickers()
+  check('能扫描用户导入的图（忽略非图片）', list.length === 2, String(list.length))
+  const shyFile = list.find((s) => s.file.includes('害羞'))
+  check('按文件名自动分类', shyFile?.moods.includes('shy'), JSON.stringify(shyFile?.moods))
+  check('中文情绪词也能匹配', matchSticker('害羞')?.file.startsWith('害羞'), String(matchSticker('害羞')?.file))
+  check('英文情绪词也能匹配', matchSticker('angry')?.file.startsWith('生气'))
+  check('匹配不上返回 null', matchSticker('sleepy') === null)
+
+  const hit = matchSticker('害羞')
+  recordUsage(hit.file)
+  check('能记使用次数', scanStickers().find((s) => s.file === hit.file).used === 1)
+  setTags(hit.file, ['羞耻'])
+  check('能人工纠正标签', scanStickers().find((s) => s.file === hit.file).moods.includes('羞耻'))
+  const summary = stickersSummary()
+  check('摘要含张数与目录', summary.count === 2 && summary.dir.endsWith('stickers'), JSON.stringify(summary))
+
+  const promptText = buildMemoryPrompt(store.view(), {
+    injectChars: 6000,
+    scope: 'global',
+    stickers: summary
+  })
+  check('表情包信息进提示词', promptText.includes('表情包') && promptText.includes('match'))
+  delete process.env.DSH_STICKERS_DIR
 }
 
 await fsp.rm(root, { recursive: true, force: true })
